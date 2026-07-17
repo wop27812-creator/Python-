@@ -1,17 +1,38 @@
 import streamlit as st
 import random
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 
-# Page configuration
-st.set_page_config(
-    page_title="Football Game Simulator",
-    page_icon="⚽",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Football Game Simulator", layout="wide", initial_sidebar_state="expanded")
 
-st.title("⚽ Football Game Statistics Simulator")
-st.markdown("Simulate a football match between two teams and analyze detailed player and team statistics.")
+# Custom CSS
+st.markdown("""
+    <style>
+    .main-header {
+        text-align: center;
+        color: #1f77b4;
+        font-size: 2.5em;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
+    .score-display {
+        text-align: center;
+        font-size: 3em;
+        font-weight: bold;
+        color: #ff7f0e;
+        margin: 20px 0;
+    }
+    .stat-box {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.markdown("<h1 class='main-header'>⚽ Football Game Statistics Simulator</h1>", unsafe_allow_html=True)
 
 # --- Helper Functions --- #
 
@@ -73,9 +94,9 @@ class Team:
     def __repr__(self):
         return f"Team(name='{self.name}', score={self.score})"
 
-
 def simulate_game_event(team_a, team_b):
     """Simulates a single event within the game."""
+    
     if team_a.possession >= team_b.possession:
         current_possessor = random.choices([team_a, team_b], weights=[0.4, 0.6], k=1)[0]
     else:
@@ -145,7 +166,6 @@ def simulate_game_event(team_a, team_b):
         fouled_player.stats['fouls_suffered'] += 1
         opponent_team.stats['fouls_suffered'] += 1
 
-
 def run_simulation(team_a, team_b, num_events):
     """Runs the full game simulation."""
     for _ in range(num_events):
@@ -156,9 +176,8 @@ def run_simulation(team_a, team_b, num_events):
         team_a.stats['possession_percentage'] = (team_a.possession / total_possession_time) * 100
         team_b.stats['possession_percentage'] = (team_b.possession / total_possession_time) * 100
 
-
-def display_player_statistics(team):
-    """Returns player statistics DataFrame."""
+def get_player_statistics_df(team):
+    """Returns player statistics as a DataFrame."""
     player_data = []
     for player in team.players:
         player_data.append({
@@ -175,10 +194,9 @@ def display_player_statistics(team):
         })
     return pd.DataFrame(player_data)
 
-
-def display_team_statistics(team):
-    """Returns team statistics DataFrame."""
-    team_data = [{
+def get_team_statistics_df(team):
+    """Returns team statistics as a DataFrame."""
+    return pd.DataFrame([{
         'Team': team.name,
         'Goals Scored': team.stats['goals_scored'],
         'Shots on Target': team.stats['shots_on_target'],
@@ -190,74 +208,174 @@ def display_team_statistics(team):
         'Fouls Committed': team.stats['fouls_committed'],
         'Fouls Suffered': team.stats['fouls_suffered'],
         'Possession %': f"{team.stats['possession_percentage']:.2f}%"
-    }]
-    return pd.DataFrame(team_data)
-
+    }])
 
 # --- Sidebar Configuration --- #
-st.sidebar.header("⚙️ Simulation Settings")
-num_events = st.sidebar.slider("Number of Game Events", min_value=50, max_value=200, value=100, step=10)
+st.sidebar.header("⚙️ Game Configuration")
 
-# --- Create Players --- #
-player1_a = Player("Leo Messi", 95, 30, 85)
-player2_a = Player("Kylian Mbappe", 90, 40, 90)
-player3_a = Player("Sergio Ramos", 60, 90, 75)
-player4_a = Player("Kevin De Bruyne", 88, 55, 88)
-player5_a = Player("Virgil van Dijk", 50, 92, 80)
+# Team A customization
+st.sidebar.subheader("Team A Setup")
+team_a_name = st.sidebar.text_input("Team A Name", "FC Alpha")
+team_a_formation = st.sidebar.selectbox("Team A Formation", ["4-3-3", "3-5-2", "5-3-2", "4-2-3-1"])
 
-team_a_players = [player1_a, player2_a, player3_a, player4_a, player5_a]
+# Team B customization
+st.sidebar.subheader("Team B Setup")
+team_b_name = st.sidebar.text_input("Team B Name", "Sporting Beta")
+team_b_formation = st.sidebar.selectbox("Team B Formation", ["4-3-3", "3-5-2", "5-3-2", "4-2-3-1"])
 
-player1_b = Player("Cristiano Ronaldo", 92, 35, 88)
-player2_b = Player("Erling Haaland", 90, 30, 87)
-player3_b = Player("Ruben Dias", 55, 91, 78)
-player4_b = Player("Luka Modric", 85, 60, 85)
-player5_b = Player("Achraf Hakimi", 75, 80, 92)
+# Game events
+game_events = st.sidebar.slider("Total Game Events", min_value=10, max_value=500, value=100, step=10)
 
-team_b_players = [player1_b, player2_b, player3_b, player4_b, player5_b]
+# Random seed for reproducibility
+use_seed = st.sidebar.checkbox("Use Random Seed (for reproducible results)")
+if use_seed:
+    seed_value = st.sidebar.number_input("Seed Value", value=42)
+    random.seed(seed_value)
+
+# --- Create Default Players --- #
+team_a_players = [
+    Player("Leo Messi", 95, 30, 85),
+    Player("Kylian Mbappe", 90, 40, 90),
+    Player("Sergio Ramos", 60, 90, 75),
+    Player("Kevin De Bruyne", 88, 55, 88),
+    Player("Virgil van Dijk", 50, 92, 80)
+]
+
+team_b_players = [
+    Player("Cristiano Ronaldo", 92, 35, 88),
+    Player("Erling Haaland", 90, 30, 87),
+    Player("Ruben Dias", 55, 91, 78),
+    Player("Luka Modric", 85, 60, 85),
+    Player("Achraf Hakimi", 75, 80, 92)
+]
 
 # --- Create Teams --- #
-team_a = Team("FC Alpha", team_a_players)
-team_b = Team("Sporting Beta", team_b_players)
+team_a = Team(team_a_name, team_a_players)
+team_b = Team(team_b_name, team_b_players)
 
-# --- Run Simulation --- #
-if st.button("🎮 Run Simulation", use_container_width=True):
-    st.info(f"Simulating match between {team_a.name} and {team_b.name} with {num_events} events...")
+# --- Run Simulation Button --- #
+col1, col2, col3 = st.columns(3)
+with col2:
+    if st.button("⚽ START SIMULATION", key="simulate", use_container_width=True):
+        st.session_state.simulation_run = True
+        run_simulation(team_a, team_b, game_events)
+
+# --- Display Results --- #
+if st.session_state.get('simulation_run', False):
     
-    run_simulation(team_a, team_b, num_events)
+    # Final Score
+    st.markdown(f"<div class='score-display'>{team_a.name} {team_a.score} - {team_b.score} {team_b.name}</div>", unsafe_allow_html=True)
     
-    # Display Match Result
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
-        st.metric(team_a.name, team_a.score)
-    with col2:
-        st.markdown(f"<h2 style='text-align: center'>Final Score</h2>", unsafe_allow_html=True)
-    with col3:
-        st.metric(team_b.name, team_b.score)
+    # Determine Winner
+    if team_a.score > team_b.score:
+        winner = f"🏆 {team_a.name} WINS!"
+        color = "green"
+    elif team_b.score > team_a.score:
+        winner = f"🏆 {team_b.name} WINS!"
+        color = "green"
+    else:
+        winner = "🤝 IT'S A DRAW!"
+        color = "blue"
     
-    st.success(f"✅ Match Complete: {team_a.name} {team_a.score} - {team_b.score} {team_b.name}")
+    st.markdown(f"<h2 style='text-align: center; color: {color};'>{winner}</h2>", unsafe_allow_html=True)
     
-    # Display Team Statistics
-    st.markdown("---")
-    st.subheader("📊 Team Statistics")
+    # Tabs for different views
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Team Stats", "👥 Player Stats", "📈 Charts", "🎯 Comparison", "📋 Detailed Stats"])
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"### {team_a.name}")
-        st.dataframe(display_team_statistics(team_a), use_container_width=True)
-    with col2:
-        st.markdown(f"### {team_b.name}")
-        st.dataframe(display_team_statistics(team_b), use_container_width=True)
+    with tab1:
+        st.subheader(f"{team_a.name} - Overall Statistics")
+        st.dataframe(get_team_statistics_df(team_a).set_index('Team'), use_container_width=True)
+        
+        st.subheader(f"{team_b.name} - Overall Statistics")
+        st.dataframe(get_team_statistics_df(team_b).set_index('Team'), use_container_width=True)
     
-    # Display Player Statistics
-    st.markdown("---")
-    st.subheader("👥 Player Statistics")
+    with tab2:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader(f"{team_a.name} - Player Statistics")
+            st.dataframe(get_player_statistics_df(team_a).set_index('Player'), use_container_width=True)
+        
+        with col2:
+            st.subheader(f"{team_b.name} - Player Statistics")
+            st.dataframe(get_player_statistics_df(team_b).set_index('Player'), use_container_width=True)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"#### {team_a.name} Players")
-        st.dataframe(display_player_statistics(team_a), use_container_width=True)
-    with col2:
-        st.markdown(f"#### {team_b.name} Players")
-        st.dataframe(display_player_statistics(team_b), use_container_width=True)
+    with tab3:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            team_a_df = get_player_statistics_df(team_a)
+            fig_goals_a = px.bar(team_a_df, x='Player', y='Goals', title=f"{team_a.name} - Goals by Player", color='Goals')
+            st.plotly_chart(fig_goals_a, use_container_width=True)
+        
+        with col2:
+            team_b_df = get_player_statistics_df(team_b)
+            fig_goals_b = px.bar(team_b_df, x='Player', y='Goals', title=f"{team_b.name} - Goals by Player", color='Goals')
+            st.plotly_chart(fig_goals_b, use_container_width=True)
+        
+        fig_possession = go.Figure(data=[go.Pie(labels=[team_a.name, team_b.name], 
+                                                values=[team_a.stats['possession_percentage'], team_b.stats['possession_percentage']],
+                                                marker=dict(colors=['#1f77b4', '#ff7f0e']))])
+        fig_possession.update_layout(title="Possession Distribution")
+        st.plotly_chart(fig_possession, use_container_width=True)
+    
+    with tab4:
+        metrics_data = {
+            'Metric': ['Goals Scored', 'Shots on Target', 'Passes Completed', 'Tackles Won', 'Possession %'],
+            team_a.name: [
+                team_a.stats['goals_scored'],
+                team_a.stats['shots_on_target'],
+                team_a.stats['passes_completed'],
+                team_a.stats['tackles_won'],
+                round(team_a.stats['possession_percentage'], 2)
+            ],
+            team_b.name: [
+                team_b.stats['goals_scored'],
+                team_b.stats['shots_on_target'],
+                team_b.stats['passes_completed'],
+                team_b.stats['tackles_won'],
+                round(team_b.stats['possession_percentage'], 2)
+            ]
+        }
+        
+        comparison_df = pd.DataFrame(metrics_data)
+        st.dataframe(comparison_df, use_container_width=True)
+        
+        fig_comparison = px.bar(comparison_df, x='Metric', y=[team_a.name, team_b.name], barmode='group', title="Team Comparison")
+        st.plotly_chart(fig_comparison, use_container_width=True)
+    
+    with tab5:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"### {team_a.name} - Detailed Statistics")
+            st.markdown(f"**Shots:** {team_a.stats['shots_on_target']} on target, {team_a.stats['shots_off_target']} off target")
+            st.markdown(f"**Pass Accuracy:** {team_a.stats['passes_completed']}/{team_a.stats['passes_attempted']} ({(team_a.stats['passes_completed']/team_a.stats['passes_attempted']*100 if team_a.stats['passes_attempted'] > 0 else 0):.1f}%)")
+            st.markdown(f"**Defensive:** {team_a.stats['tackles_won']} tackles, {team_a.stats['interceptions_made']} interceptions")
+            st.markdown(f"**Fouls:** {team_a.stats['fouls_committed']} committed, {team_a.stats['fouls_suffered']} suffered")
+        
+        with col2:
+            st.markdown(f"### {team_b.name} - Detailed Statistics")
+            st.markdown(f"**Shots:** {team_b.stats['shots_on_target']} on target, {team_b.stats['shots_off_target']} off target")
+            st.markdown(f"**Pass Accuracy:** {team_b.stats['passes_completed']}/{team_b.stats['passes_attempted']} ({(team_b.stats['passes_completed']/team_b.stats['passes_attempted']*100 if team_b.stats['passes_attempted'] > 0 else 0):.1f}%)")
+            st.markdown(f"**Defensive:** {team_b.stats['tackles_won']} tackles, {team_b.stats['interceptions_made']} interceptions")
+            st.markdown(f"**Fouls:** {team_b.stats['fouls_committed']} committed, {team_b.stats['fouls_suffered']} suffered")
+
 else:
-    st.info("👈 Click the 'Run Simulation' button to start the match!")
+    st.info("👈 Configure the game in the sidebar and click 'START SIMULATION' to begin!")
+    
+    st.subheader("Default Teams Preview")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**FC Alpha Players**")
+        for player in team_a_players:
+            st.markdown(f"- {player.name} (OFF: {player.offense}, DEF: {player.defense})")
+    
+    with col2:
+        st.markdown("**Sporting Beta Players**")
+        for player in team_b_players:
+            st.markdown(f"- {player.name} (OFF: {player.offense}, DEF: {player.defense})")
+
+st.markdown("---")
+st.markdown("<p style='text-align: center; color: gray;'>Football Game Statistics Simulator | Made with Streamlit ⚽</p>", unsafe_allow_html=True)
